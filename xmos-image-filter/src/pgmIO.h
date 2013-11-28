@@ -1,84 +1,31 @@
 /*
- * pgmIO.h
- *
- *  Created on: Nov 28, 2013
- *      Author: alexander
+ * File: 	pgmIO.h
+ * Date: 	28th November 2013
+ * Author: 	Samuel Whitehouse 	- sw12690@my.bristol.ac.uk
+ * Author: 	Alexander Hill		- ah12466@my.bristol.ac.uk
+ * Brief:	Header file for pgmIO.c. For more detailed information, view file 'pgmIO.c'
  */
-
 #ifndef PGMIO_H_
 #define PGMIO_H_
 
-
-#endif /* PGMIO_H_ */
-/*
- * derp.xc
- *
- *  Created on: Dec 20, 2011
- *      Author: jamie
- */
-
-#ifndef PGMIO_H_ 
-
-#define PGMIO_H_ 
-
 #include <stdlib.h>
-
 #include <stdio.h>
-
 #include <string.h>
 
-///////////////////////////////////////////////////////////////////////////////////////////// 
+// Structure containing the file pointer and information about dimensions the picture.
+typedef struct {FILE* filePointer; unsigned int width; unsigned int height;}
+	fileContainer;
 
-// 
+// Opens a new file for reading or writing, outputting the fileContainer.
+fileContainer openInPGM(char fname[]);
+fileContainer openOutPGM(char fname[], int outWidth, int outHeight);
 
-// standard pgm input and output routines 
+// Reads or writes lines from or into a fileContainer using a char array.
+int readLinePGM(fileContainer PGM, unsigned char line[]);
+int writeLinePGM(fileContainer PGM, unsigned char line[]);
 
-// 
-
-// Input is a referenced array of unsigned chars of width and height and a 
-
-// referenced char array of the system path to destination, e.g. 
-
-// "/home/user/xmos/project/" on Linux or "C:\\user\\xmos\\project\\" on Windows 
-
-// 
-
-///////////////////////////////////////////////////////////////////////////////////////////// 
-
-int _writepgm(unsigned char x[], int height, int width, char fname[]); 
-
-int _readpgm(unsigned char x[], int height, int width, char fname[]);
-
-/////////////////////////////////////////////////////////////////////////////////////////////
-
-//
-
-// Line-wise pgm input routines: open file, read a line, close the file
-
-//
-
-/////////////////////////////////////////////////////////////////////////////////////////////
-
-int _openinpgm(char fname[], int width, int height); 
-
-int _readinline(unsigned char line[], int width); 
-
-int _closeinpgm(); 
-
-/////////////////////////////////////////////////////////////////////////////////////////////
-
-//
-
-// Line-wise pgm output routines: open file, read a line, close the file
-
-//
-
-/////////////////////////////////////////////////////////////////////////////////////////////
-
-int _openoutpgm(char fname[], int width, int height); 
-
-int _writeoutline(unsigned char line[], int width); 
-
-int _closeoutpgm(); 
+// Closes the PGM file and sets filePointer = NULL.
+int closePGM();
 
 #endif /*PGMIO_H_*/
+
