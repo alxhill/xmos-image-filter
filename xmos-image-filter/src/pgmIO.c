@@ -1,6 +1,6 @@
 /*
  * File: 	pmgIO.c
- * Date:	28th November 2013
+ * Date:	3rd December 2013
  * Author: 	Samuel Whitehouse 	- sw12690@my.bristol.ac.uk
  * Author: 	Alexander Hill		- ah12466@my.bristol.ac.uk
  * Brief:	Library dealing with PGM files, including opening, writing, reading and closing.
@@ -8,35 +8,40 @@
 #include "pgmIO.h"
 
 /*
- * Brief:	Opens a PGM file, reading the header and returning a fileContainer with the height/width of the picture and the filePointer.
+ * Brief:	Opens a PGM file, reading the header and returning a fPointer to the picture.
  * Param:	fname - The name of the file to be opened
  * Return:	Returns a fileContainer containing the width/height of the picture and the file pointer to the picture.
  * Note:	On fail the file is closed and the filePointer set to NULL.
  * Note:	Will fail if file cannot be opened.
  * Author:	Samuel Whitehouse - sw12690@my.bristol.ac.uk
  */
-fileContainer openInPGM(char fname[])
+fPointer openInPGM(char fname[], unsigned int inWidth, unsigned int inHeight)
 {
+	FILE* filePointer;
 	char input[64];
-	int inWidth, inHeight;
-	fileContainer newFile;
+	fPointer newFile;
+	unsigned int width, height;
 	
-	newFile.filePointer = fopen(fname, "rb");
-	if(newFile.filePointer == NULL) return newFile;
+	filePointer = fopen(fname, "rb");
+	newFile = (fPointer)filePointer;
+	if(filePointer == NULL) return newFile;
 
-	
-	fgets(input, 64, newFile.filePointer); ///< Obtains the Version Number
-	if(input[0] != 'P' || input[1] != '5' || input[2] != '\n'){
+	fgets(input, 64, filePointer); ///< Obtains the Version Number
+	if(input[0] != 'P' || input[1] != '5' || input[2] != '\n')
+	{
 		closePGM(newFile);
 		return newFile;
 	}
 	
-	fgets(input, 64, newFile.filePointer); ///< Obtains the Width and Height
-	sscanf(input, "%d%d", &inWidth, &inHeight);
-	newFile.width = inWidth;
-	newFile.height = inHeight;
+	fgets(input, 64, filePointer); ///< Obtains the Width and Height
+	sscanf(input, "%d%d", &width, &height);
+	if(width != inWidth || height != inHeight)
+	{
+		closePGM(newFile);
+		return newFile;
+	}
 
-	fgets(input, 64, newFile.filePointer); ///< Obtains Bit Depth
+	fgets(input, 64, filePointer); ///< Obtains Bit Depth
 	if(input[0] != '2' || input[1] != '5' || input[2] != '5' || input[3] != '\n'){
 		closePGM(newFile);
 		return newFile;
@@ -55,19 +60,18 @@ fileContainer openInPGM(char fname[])
  * Note:	Will fail if file cannot be opened.
  * Author:	Samuel Whitehouse - sw12690@my.bristol.ac.uk
  */
-fileContainer openOutPGM(char fname[], int outWidth, int outHeight)
+fPointer openOutPGM(char fname[], unsigned int outWidth, unsigned int outHeight)
 {
+	FILE* filePointer;
     char output[64];
-	fileContainer newFile;
+	fPointer newFile;
 	
-	newFile.filePointer = fopen(fname, "wb");
-	
-	if(newFile.filePointer == NULL)	return newFile;
+	filePointer = fopen(fname, "wb");
+	newFile = (fPointer)filePointer;
+	if(filePointer == NULL) return newFile;
 
-    sprintf(output, "P5\n%d %d\n255\n", outWidth, outHeight );
-    fprintf(newFile.filePointer, "%s", output);
-	newFile.width = outWidth;
-	newFile.height = outHeight;
+    sprintf(output, "P5\n%d %d\n255\n", outWidth, outHeight);
+    fprintf(filePointer, "%s", output);
 
 	return newFile;
 }
@@ -80,20 +84,11 @@ fileContainer openOutPGM(char fname[], int outWidth, int outHeight)
  * Note:	Will fail if it cannot read a full line, or reaches EOF.
  * Author:	Samuel Whitehouse - sw12690@my.bristol.ac.uk
  */
-int readLinePGM(fileContainer PGM, unsigned char line[])
+pixel readCharPGM(fPointer file)
 {
-	int lineLength;
-
-	if(PGM.filePointer == NULL ) return -1;
-
-	lineLength = fread(line, 1, PGM.width, PGM.filePointer);
-
-	if(lineLength != PGM.width){
-		closePGM(PGM);
-		return -1;
-	}
+	pixel new = fgetc((FILE*)file);
 	
-	return 0;
+	return new;
 }
 
 /*
@@ -104,20 +99,13 @@ int readLinePGM(fileContainer PGM, unsigned char line[])
  * Note:	Will fail if it cannot write a full line.
  * Author:	Samuel Whitehouse - sw12690@my.bristol.ac.uk
  */
-int writeLinePGM(fileContainer PGM, unsigned char line[])
+unsigned char writeCharPGM(fPointer file, pixel toAdd)
 {
-	int lineLength;
+	if(file == (fPointer)NULL ) return FALSE;
 
-	if(PGM.filePointer == NULL ) return -1;
+	fputc(toAdd, (FILE*)file);
 
-	lineLength = fwrite(line, 1, PGM.width, PGM.filePointer);
-
-	if(lineLength != PGM.width){
-		closePGM(PGM);
-		return -1;
-	}
-
-	return 0;
+	return TRUE;
 }
 
 /*
@@ -127,11 +115,10 @@ int writeLinePGM(fileContainer PGM, unsigned char line[])
  * Note:	Will fail if it cannot close the file.
  * Author:	Samuel Whitehouse - sw12690@my.bristol.ac.uk
  */
-int closePGM(fileContainer PGM)
+unsigned char closePGM(fPointer file)
 {
-	if(fclose(PGM.filePointer) != 0) return -1;
-	PGM.filePointer = NULL;
+	if(fclose((FILE*)file) != 0) return FALSE;
 	
-	return 0;
+	return TRUE;
 }
 

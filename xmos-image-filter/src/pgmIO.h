@@ -12,20 +12,24 @@
 #include <stdio.h>
 #include <string.h>
 
-// Structure containing the file pointer and information about dimensions the picture.
-typedef struct {FILE* filePointer; unsigned int width; unsigned int height;}
-	fileContainer;
+// Useful defines to help with like of boolean suport in xc.
+#define TRUE 1
+#define FALSE 0
 
-// Opens a new file for reading or writing, outputting the fileContainer.
-fileContainer openInPGM(char fname[]);
-fileContainer openOutPGM(char fname[], int outWidth, int outHeight);
+// Allows writing of 'unsigned char' as 'pixel' and 'unsigned int' as 'fPointer' for ease of use.
+typedef unsigned char pixel;
+typedef unsigned int fPointer;
 
-// Reads or writes lines from or into a fileContainer using a char array.
-int readLinePGM(fileContainer PGM, unsigned char line[]);
-int writeLinePGM(fileContainer PGM, unsigned char line[]);
+// Opens a new file for reading or writing, outputting the file pointer (as an unsigned int as xc can't handle anything more complex than integer division).
+fPointer openInPGM(char fname[], unsigned int inWidth, unsigned int inHeight);
+fPointer openOutPGM(char fname[], unsigned int outWidth, unsigned int outHeight);
 
-// Closes the PGM file and sets filePointer = NULL.
-int closePGM();
+// Reads or writes pixels into a PGM file.
+pixel readCharPGM(fPointer file);
+unsigned char writeCharPGM(fPointer file, pixel toAdd);
+
+// Closes the PGM file.
+unsigned char closePGM(fPointer file);
 
 #endif /*PGMIO_H_*/
 
