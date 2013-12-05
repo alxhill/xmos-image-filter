@@ -10,7 +10,6 @@
 
 #include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
 
 // Useful defines to help with like of boolean suport in xc.
 #define TRUE 1
