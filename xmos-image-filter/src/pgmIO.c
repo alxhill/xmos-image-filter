@@ -1,124 +1,173 @@
-/*
- * File: 	pmgIO.c
- * Date:	3rd December 2013
- * Author: 	Samuel Whitehouse 	- sw12690@my.bristol.ac.uk
- * Author: 	Alexander Hill		- ah12466@my.bristol.ac.uk
- * Brief:	Library dealing with PGM files, including opening, writing, reading and closing.
- */
 #include "pgmIO.h"
 
-/*
- * Brief:	Opens a PGM file, reading the header and returning a fPointer to the picture.
- * Param:	fname - The name of the file to be opened
- * Return:	Returns a fileContainer containing the width/height of the picture and the file pointer to the picture.
- * Note:	On fail the file is closed and the filePointer set to NULL.
- * Note:	Will fail if file cannot be opened.
- * Author:	Samuel Whitehouse - sw12690@my.bristol.ac.uk
- */
-fPointer openInPGM(char fname[], unsigned int inWidth, unsigned int inHeight)
-{
-	FILE* filePointer;
-	char input[64];
-	fPointer newFile;
-	unsigned int width, height;
-	
-	filePointer = fopen(fname, "rb");
-	newFile = (fPointer)filePointer;
-	if(filePointer == NULL) return newFile;
+FILE *_INFP = NULL;
+FILE *_OUTFP = NULL;
 
-	fgets(input, 64, filePointer); ///< Obtains the Version Number
-	if(input[0] != 'P' || input[1] != '5' || input[2] != '\n')
+/////////////////////////////////////////////////////////////////////////////////////////////
+//Line-wise pgm in:
+int _openinpgm(char fname[], int width, int height)
+{
+	char str[ 64 ];
+    int inwidth, inheight;
+
+	_INFP = fopen( fname, "rb" );
+	if( _INFP == NULL )
 	{
-		closePGM(newFile);
-		return newFile;
+		printf( "Could not open %s.\n", fname );
+		return -1;
 	}
-	
-	fgets(input, 64, filePointer); ///< Obtains the Width and Height
-	sscanf(input, "%d%d", &width, &height);
-	if(width != inWidth || height != inHeight)
+	//Strip off header
+    fgets( str, 64, _INFP ); //Version: P5
+    fgets( str, 64, _INFP ); //width and height
+    sscanf( str, "%d%d", &inwidth, &inheight );
+    if( inwidth != width || inheight != height )
+    {
+    	printf( "Input image size(%dx%d) does not = %dx%d or trouble reading header\n", inwidth, inheight, width, height );
+    	return -1;
+    }
+    fgets( str, 64, _INFP ); //bit depth, must be 255
+	return 0;
+}
+
+int _readinline(unsigned char line[], int width)
+{
+	int nb;
+
+	if( _INFP == NULL )
 	{
-		closePGM(newFile);
-		return newFile;
+		return -1;
 	}
 
-	fgets(input, 64, filePointer); ///< Obtains Bit Depth
-	if(input[0] != '2' || input[1] != '5' || input[2] != '5' || input[3] != '\n'){
-		closePGM(newFile);
-		return newFile;
+	nb = fread( line, 1, width, _INFP );
+
+	if( nb != width )
+	{
+		//printf( "Error reading line, nb = %d\n", nb );
+		//Error or end of file
+		return -1;
 	}
-	
-	return newFile;
+	return 0;
 }
 
-/*
- * Brief:	Opens a PGM file, writing the header and returning a fileContainer with the height/width of the picture and the filePointer.
- * Param:	fname 		- The name of the file to be opened
- * Param:	outWidth	- The width of the picture to be outputted.
- * Param:	outHeight	- The height of the picture to be outputted.
- * Return:	Returns a fileContainer containing the width/height of the picture and the file pointer to the picture.
- * Note:	On fail the file is closed and the filePointer set to NULL.
- * Note:	Will fail if file cannot be opened.
- * Author:	Samuel Whitehouse - sw12690@my.bristol.ac.uk
- */
-fPointer openOutPGM(char fname[], unsigned int outWidth, unsigned int outHeight)
+int _closeinpgm()
 {
-	FILE* filePointer;
-    char output[64];
-	fPointer newFile;
-	
-	filePointer = fopen(fname, "wb");
-	newFile = (fPointer)filePointer;
-	if(filePointer == NULL) return newFile;
-
-    sprintf(output, "P5\n%d %d\n255\n", outWidth, outHeight);
-    fprintf(filePointer, "%s", output);
-
-	return newFile;
+	int ret = fclose( _INFP );
+	if( ret == 0 )
+	{
+		_INFP = NULL;
+	}
+	else
+	{
+		printf( "Error closing file _INFP.\n" );
+	}
+	return ret; //return zero for succes and EOF for fail
 }
 
-/*
- * Brief:	Reads a single line from a PGM file based on the width of the file.
- * Param:	PGM - The fileContainer of the picture to be read.
- * Param:	line - The string that the line will be outputted to.
- * Return:	Returns 0 on successful reading, -1 if fails.
- * Note:	Will fail if it cannot read a full line, or reaches EOF.
- * Author:	Samuel Whitehouse - sw12690@my.bristol.ac.uk
- */
-pixel readCharPGM(fPointer file)
+/////////////////////////////////////////////////////////////////////////////////////////////
+//Line-wise pgm out:
+int _openoutpgm(char fname[], int width, int height)
 {
-	pixel new = fgetc((FILE*)file);
-	
-	return new;
+    char hdr[ 64 ];
+
+	_OUTFP = fopen( fname, "wb" );
+	if( _OUTFP == NULL )
+	{
+		printf( "Could not open %s.\n", fname );
+		return -1;
+	}
+
+    sprintf( hdr, "P5\n%d %d\n255\n", width, height );
+    fprintf( _OUTFP, "%s", hdr );
+
+	return 0;
 }
 
-/*
- * Brief:	Writes a single line to a PGM file based on the width of the file.
- * Param:	PGM - The fileContainer of the picture to be written to.
- * Param:	line - The string that will be written into the file.
- * Return:	Returns 0 on successful writing, -1 if fails.
- * Note:	Will fail if it cannot write a full line.
- * Author:	Samuel Whitehouse - sw12690@my.bristol.ac.uk
- */
-unsigned char writeCharPGM(fPointer file, pixel toAdd)
+int _writeoutline(unsigned char line[], int width)
 {
-	if(file == (fPointer)NULL ) return FALSE;
+	int nb;
 
-	fputc(toAdd, (FILE*)file);
+	if( _OUTFP == NULL )
+	{
+		return -1;
+	}
 
-	return TRUE;
+	nb = fwrite( line, 1, width, _OUTFP );
+
+	if( nb != width )
+	{
+		//printf( "Error writing line, nb = %d\n", nb );
+		//Error or end of file
+		return -1;
+	}
+	return 0;
 }
 
-/*
- * Brief:	Closes a PGM file.
- * Param:	PGM - The fileContainer of the picture to be closed.
- * Return:	Returns 0 on successful closing, -1 if fails.
- * Note:	Will fail if it cannot close the file.
- * Author:	Samuel Whitehouse - sw12690@my.bristol.ac.uk
- */
-unsigned char closePGM(fPointer file)
+int _closeoutpgm()
 {
-	if(fclose((FILE*)file) != 0) return FALSE;
-	
-	return TRUE;
+	int ret = fclose( _OUTFP );
+	if( ret == 0 )
+	{
+		_OUTFP = NULL;
+	}
+	else
+	{
+		printf( "Error closing file _OUTFP.\n" );
+	}
+	return ret; //return zero for succes and EOF for fail
 }
 
+/////////////////////////////////////////////////////////////////////////////////////////////
+//Standard pgm IO:
+
+//Input is a referenced array of unsigned chars of width and height and a
+//referenced char array of the system path to destination, e.g.
+//"/home/user/xmos/project/" on Linux or "C:\\user\\xmos\\project\\" on Windows
+int _writepgm(unsigned char x[], int height, int width, char fname[])
+{
+    FILE *fp;
+    int hlen;
+    char hdr[ 64 ];
+
+    sprintf( hdr, "P5\n%d %d\n255\n", width, height );
+    hlen = strlen( hdr );
+	printf( "In writepgm function, writing: %s\n", fname );
+
+	fp = fopen( fname, "wb" );
+	if( fp == NULL)
+	{
+		printf( "Could not open %s for writing.\n", fname );
+		return -1;
+	}
+    fprintf( fp, "%s", hdr );
+    fwrite( x, width * height, 1, fp );
+    fclose( fp );
+    return 0;
+}
+
+int _readpgm(unsigned char x[], int height, int width, char fname[])
+{
+    FILE *fp;
+    int inwidth, inheight;
+    char str[ 64 ];
+
+	printf( "In readpgm function, reading: %s\n", fname );
+
+	fp = fopen( fname, "rb" );
+	if( fp == NULL)
+	{
+		printf( "Could not open %s for reading.\n", fname );
+		return -1;
+	}
+    fgets( str, 64, fp ); //Version: P5
+    fgets( str, 64, fp ); //width and height
+    sscanf( str, "%d%d", &inwidth, &inheight );
+    fgets( str, 64, fp ); //bit depth, must be 255
+    if( inwidth != width || inheight != height )
+    {
+    	printf( "Input image size(%dx%d) does not = %dx%d or trouble reading header\n", inwidth, inheight, width, height );
+    	return -1;
+    }
+    fread( x, inwidth * inheight, 1, fp );
+    fclose( fp );
+    return 0;
+}

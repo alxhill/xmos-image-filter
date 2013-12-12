@@ -6,51 +6,58 @@
  */
 #include "convolution.h"
 
-float const blur[3][3] = {
-		{0.333, 0.333, 0.333},
-		{0.333, 0.333, 0.333},
-		{0.333, 0.333, 0.333}
+float blur[3][3] = {
+		{0.333,0.333,0.333},
+		{0.333,0.333,0.333},
+		{0.333,0.333,0.333}
 };
 
-float const sharpen[3][3] = {
+
+float sharpen[3][3] = {
 		{-1,-1,-1},
 		{-1,9,-1},
 		{-1,-1,-1}
 };
 
-float const edges[3][3] = {
+float edges[3][3] = {
 		{-1,-1,-1},
 		{-1,8,-1},
 		{-1,-1,-1}
 };
 
-float const emboss[3][3] = {
+float emboss[3][3] = {
 		{-2,-1,0},
 		{-1,1,1},
 		{0,1,2}
 };
 
-pixel convolution(filter_t f, pixel pixels[3][3])
-{
-	float filter[3][3];
-	float row1, row2, row3, final;
 
-	switch (f)
+pixel convolution_handler(filter_t filter, pixel p1, pixel p2, pixel p3, pixel p4, pixel p5, pixel p6, pixel p7, pixel p8, pixel p9)
+{
+	pixel pixels[3][3] = {
+			{p1, p2, p3},
+			{p4, p5, p6},
+			{p7, p8, p9}
+	};
+
+	switch (filter)
 	{
 		case BLUR:
-			filter = blur;
-			break;
+			return convolution(blur, pixels);
 		case SHARPEN:
-			filter = sharpen;
-			break;
+			return convolution(sharpen, pixels);
 		case EDGES:
-			filter = edges;
-			break;
+			return convolution(edges, pixels);
 		case EMBOSS:
-			filter = emboss;
-			break;
+			return convolution(emboss, pixels);
 		default: break;
 	}
+	return 0;
+}
+
+pixel convolution(float filter[3][3], pixel pixels[3][3])
+{
+	float row1, row2, row3, final;
 
 	row1 = filter[0][0]*pixels[0][0]+filter[0][1]*pixels[0][1]+filter[0][2]*pixels[0][2];
 	row2 = filter[1][0]*pixels[1][0]+filter[1][1]*pixels[1][1]+filter[1][2]*pixels[1][2];
