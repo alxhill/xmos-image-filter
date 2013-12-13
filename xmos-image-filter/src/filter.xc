@@ -105,15 +105,15 @@ void distributor(chanend c_in, chanend c_out)
 void processimage(chanend c_in, chanend c_out, int width, int height)
 {
 	pixel imageIn[18][18];
-	 pixel imageOut[16][16];
+	 pixel pixelOut;
 
 	// fill in the edges of the image so it's all black
 	for (int i = 0; i < 18; i++)
 	{
-		imageIn[i][0] = BIT_DEPTH;
-		imageIn[i][17] = BIT_DEPTH;
-		imageIn[0][i] = BIT_DEPTH;
-		imageIn[17][i] = BIT_DEPTH;
+		imageIn[i][0] = 0;
+		imageIn[i][17] = 0;
+		imageIn[0][i] = 0;
+		imageIn[17][i] = 0;
 	}
 
 	for (int i = 1; i < width+1; i++)
@@ -130,13 +130,13 @@ void processimage(chanend c_in, chanend c_out, int width, int height)
 	{
 		for (int k = 1; k < 17; k++)
 		{
-			imageOut[j-1][k-1] = convolution_handler(BLUR,
+			pixelOut = convolution_handler(BLUR,
 				imageIn[j-1][k-1], imageIn[j][k-1], imageIn[j+1][k-1],
 				imageIn[j-1][k],   imageIn[j][k],   imageIn[j+1][k],
 				imageIn[j-1][k+1], imageIn[j][k+1], imageIn[j+1][k+1]
 			);
 //			printf("processed pixel %d %d\n", j-1, k-1);
-			c_out <: imageOut[j-1][k-1];
+			c_out <: pixelOut;
 		}
 	}
 }
@@ -148,11 +148,13 @@ int main()
 
 	printf("about to load data\n");
 	par {
-		DataInStream("/Users/alexander/dev/csyear2/xmos-image-filter/xmos-image-filter/src/pictures/test.pgm", cin);
+		DataInStream("/Users/alexander/dev/csyear2/xmos-image-filter/xmos-image-filter/src/pictures/test0.pgm", cin);
 		//distributor(cin, cout);
 		processimage(cin, cout, IMWD, IMHT);
-		DataOutStream("/Users/alexander/dev/csyear2/xmos-image-filter/xmos-image-filter/src/pictures/test_out.pgm", cout);
+		DataOutStream("/Users/alexander/dev/csyear2/xmos-image-filter/xmos-image-filter/src/pictures/test0_out.pgm", cout);
 	}
+
+	printf("filtering complete, terminating\n");
 
 	return 0;
 }
