@@ -12,7 +12,7 @@
 #define BIT_DEPTH 255
 
 typedef enum {BLUR, SHARPEN, EDGES, EMBOSS} filter_t;
-typedef char pixel;
+typedef unsigned char pixel;
 
 pixel convolution_handler(filter_t filter, pixel p1, pixel p2, pixel p3, pixel p4, pixel p5, pixel p6, pixel p7, pixel p8, pixel p9);
 pixel convolution(float filter[3][3], pixel pixels[3][3]);
