@@ -11,207 +11,194 @@
 #include <stdio.h>
 #include "convolution.h"
 
+#define FALSE 0
+#define TRUE 1
+#define NUM_WORKERS 5
+#define NUM_LED 12
+
+#define FILE_IN_NAME "C:\\Users\\Sam\\Desktop\\xmos\\test.pgm"
+#define FILE_OUT_NAME "C:\\Users\\Sam\\Desktop\\xmos\\test_out.pgm"
 #define IMHT 16
 #define IMWD 16
-#define WORKERS 4
 
-/////////////////////////////////////////////////////////////////////////////////////////
-//
-// Read Image from pgm file with path and name infname[] to channel c_out
-//
-/////////////////////////////////////////////////////////////////////////////////////////
-void DataInStream(char infname[], chanend c_out)
+
+void dataInStream(char file_name[], chanend stream_in)
 {
-    pixel line[ IMWD ];
+	int x, y;
+	pixel line[ IMWD ];
 
-    printf( "DataInStream:Start...\n" );
-
-    if(_openinpgm( infname, IMWD, IMHT ))
-    {
-        printf( "DataInStream:Error openening %s\n.", infname );
-        return;
-    }
-
-    for( int y = 0; y < IMHT; y++ )
-    {
-        _readinline( line, IMWD );
-        for( int x = 0; x < IMWD; x++ )
-        {
-            c_out <: line[x];
-//            printf( "-%4.1d ", line[ x ] ); //uncomment to show image values
-        }
-//        printf( "\n" ); //uncomment to show image values
-    }
-
-    _closeinpgm();
-    printf( "DataInStream:Done...\n" );
-    return;
-}
-
-void DataOutStream(char outfname[], chanend c_out)
-{
-    pixel line[ IMWD ];
-
-    printf( "DataOutStream:Start...\n" );
-
-    if(_openoutpgm( outfname, IMWD, IMHT ))
-    {
-        printf( "DataOutStream:Error openening %s\n.", outfname );
-        return;
-    }
-
-    for( int y = 0; y < IMHT; y++ )
-    {
-        for( int x = 0; x < IMWD; x++ )
-        {
-            c_out :> line[x];
-//            printf( "+%4.1d ", line[ x ] ); //uncomment to show image values
-        }
-        _writeoutline(line, IMWD);
-//        printf( "\n" ); //uncomment to show image values
-    }
-
-    _closeinpgm();
-    printf( "DataOutStream:Done...\n" );
-    return;
-}
-
-void processPixel(chanend c_in)
-{
-	while (1)
+	if(_openinpgm(file_name, IMWD, IMHT))
 	{
-		int shouldProcess;
-		// the matrix of pixels needed to calculate the convolution
-		pixel pixelsIn[3][3];
-		pixel pixelOut;
+		printf( "DataInStream:Error openening %s\n.", file_name);
+		return;
+	}
+	for(y = 0; y < IMHT; y++)
+	{
+		_readinline(line, IMWD);
+		for(x = 0; x < IMWD; x++) stream_in <: line[x];
+	}
+	_closeinpgm();
 
-		c_in :> shouldProcess;
-		if (shouldProcess == 0) return;
+	return;
+}
 
-//		printf("worker ready to receive\n");
+void dataOutStream(chanend workers_out[], char file_name[])
+{
+	int x, i;
+	pixel line[IMWD];
+	int currLine = 1;
+	int lineNum;
 
-		for (int i = 0; i < 3; i++)
+	if(_openoutpgm(file_name, IMWD, IMHT))
+	{
+		printf("DataOutStream:Error openening %s\n.", file_name);
+		return;
+	}
+
+	for(x = 0; x < IMWD; x++)
+	{
+		line[x] = 0;
+	}
+	_writeoutline(line, IMWD);
+
+	while(currLine < (IMHT - 1))
+	{
+		for(i = 0; i < NUM_WORKERS; i++)
 		{
-			for (int j = 0; j < 3; j++)
-			{
-				c_in :> pixelsIn[i][j];
+			select{
+				case workers_out[i] :> lineNum:
+					if(lineNum == currLine)
+					{
+						workers_out[i] <: TRUE;
+						for(x = 1; x < (IMWD - 1); x++)
+						{
+							workers_out[i] :> line[x];
+						}
+						_writeoutline(line, IMWD);
+						currLine++;
+					}
+					else workers_out[i] <: FALSE;
+					break;
+				default:
+					break;
 			}
 		}
-
-//		printf("worker finished receiving\n");
-
-		pixelOut = convolution_handler(BLUR,
-					pixelsIn[0][0], pixelsIn[1][0], pixelsIn[2][0],
-					pixelsIn[0][1], pixelsIn[1][1], pixelsIn[2][1],
-					pixelsIn[0][2], pixelsIn[1][2], pixelsIn[2][2]);
-
-		c_in <: pixelOut;
 	}
-}
 
-void fillLine(chanend c_in, pixel line[IMWD+2])
-{
-	// ensures the edges are black
-	line[0] = 0;
-	line[IMWD+1] = 0;
-
-	for (int i = 1; i <= IMWD; i++)
+	for(x = 0; x < IMWD; x++)
 	{
-		c_in :> line[i];
-//		printf("x");
+		line[x] = 0;
 	}
+	_writeoutline(line, IMWD);
+	_closeinpgm();
+
+	return;
 }
 
-void distributor(chanend c_in, chanend c_filters[WORKERS], chanend c_out)
+void processLine(chanend worker_in, chanend worker_out)
 {
-    // buffer of the last three lines received, with black edges
-    pixel lines[3][IMWD+2];
-    // start on the second line so the first line is a black edge
-    int currLine = 1;
+	int x, y, lineNumber = 0, proceed;
+	pixel pixelsIn[3][IMWD];
+	pixel pixelsOut[IMWD - 2];
+	filter_t filter;
 
-    pixel val;
-
-    printf( "ProcessImage:Start, size = %dx%d\n", IMHT, IMWD );
-
-    // initialise the line buffer with a black edge and the first line
-    for (int i = 0; i<IMWD+2; i++)
-    	lines[0][i] = 0;
-    fillLine(c_in, lines[1]);
-
-    // process the current line of pixels, passing each pixel to a separate worker
-    while (currLine <= IMHT)
-    {
-    	if (currLine == IMHT)
-    	{
-//    		printf("filling black bottom line %d\n", currLine+1);
-			for (int l = 0; l < IMWD+2; l++)
-				lines[(currLine+1)%3][l] = 0;
-		}
-		else
+	worker_in :> filter;
+	while(lineNumber < IMHT)
+	{
+		worker_in <: TRUE;
+		worker_in :> lineNumber;
+		if(lineNumber < IMHT)
 		{
-//			printf("filling line %d\n", currLine+1);
-			fillLine(c_in, lines[(currLine+1)%3]);
-		}
-
-        printf("\n==== LINE %d ====\n", currLine);
-		for (int i = 1; i <= IMWD; i) // incrementing is done manually later
-		{
-			int workCount = IMWD-(i-1) > WORKERS ? WORKERS : IMWD-(i-1);
-			for (int j = 0; j < workCount; j++)
-			{
-				c_filters[j] <: 1;
-//				printf("sending data for (%d, %d) to worker %d\n", j+i, currLine, j);
-				// loop through the line above and below the current
-				// goes from 2 to 5 due to % not working on negative numbers
-				for (int l = 2; l < 5; l++)
+			for(y = 0; y < 3; y++)
+				for(x = 0; x < IMWD; x++)
 				{
-					int line = (currLine+l)%3;
-//					printf("sending line %d to worker %d\n", line, j);
-
-					c_filters[j] <: lines[line][j+i-1];
-					c_filters[j] <: lines[line][j+i];
-					c_filters[j] <: lines[line][j+i+1];
+					worker_in :> pixelsIn[y][x];
 				}
-//				printf("sent\n");
-			}
+			for(x = 0; x < (IMWD - 2); x++)
+				pixelsOut[x] = convolution_handler(filter,
+						pixelsIn[0][x], pixelsIn[0][x + 1], pixelsIn[0][x + 2],
+						pixelsIn[1][x], pixelsIn[1][x + 1], pixelsIn[1][x + 2],
+						pixelsIn[2][x], pixelsIn[2][x + 1], pixelsIn[2][x + 2]);
 
-			// send each of the values from the workers back to the out channel
-			for (int k=0;k<workCount;k++)
-			{
-				c_filters[k] :> val;
-				c_out <: val;
+			proceed = FALSE;
+			while(proceed == FALSE){
+				worker_out <: lineNumber;
+				worker_out :> proceed;
 			}
-
-			// increment i by the number of pixels processed.
-			i += workCount;
+			for (x = 0; x < (IMWD - 2); x++) worker_out <: pixelsOut[x];
 		}
+	}
 
-//		printf("\n==== LINE %d DONE ===\n", currLine);
+	return;
+}
 
+void distributor(chanend stream_in, chanend workers_in[NUM_WORKERS])
+{
+	int x, y, i, currLine = 1;
+	pixel lines[3][IMWD];
+	int sent;
+
+	for(y = 1; y < 3; y++)
+		for(x = 0; x < IMWD; x++)
+			stream_in :> lines[y][x];
+
+	for(i = 0; i < NUM_WORKERS; i++){
+		workers_in[i] <: BLUR;
+	}
+
+	while(currLine < (IMHT - 1))
+	{
+		for(x = 0; x < IMWD; x++)
+		{
+			lines[0][x] = lines[1][x];
+			lines[1][x] = lines[2][x];
+			stream_in :> lines[2][x];
+		}
+		sent = FALSE;
+		while(sent == FALSE)
+		{
+			for(i = 0; i < NUM_WORKERS && sent == FALSE; i++)
+			{
+				select{
+					case workers_in[i] :> sent:
+						printf("Using Worker %d\n", i);
+						workers_in[i] <: currLine;
+						for(y = 0; y < 3; y++)
+							for(x = 0; x < IMWD; x++)
+								workers_in[i] <: lines[y][x];
+						break;
+					default:
+						break;
+				}
+			}
+		}
 		currLine++;
     }
 
-    // tell all the workers to stop.
-    for (int i=0; i < WORKERS; i++)
-    	c_filters[i] <: 0;
+	for(i = 0; i < NUM_WORKERS; i++)
+	{
+		workers_in[i] :> sent;
+		workers_in[i] <: IMHT;
+	}
 
-    printf( "ProcessImage:Done...\n" );
+	return;
 }
 
 int main()
 {
-	chan c_in, c_collect, c_out;
-	chan c_filters[WORKERS];
+	chan stream_in;
+	chan workers_in[NUM_WORKERS];
+	chan workers_out[NUM_WORKERS];
 
 	par {
-		DataInStream("/Users/alexander/dev/csyear2/xmos-image-filter/xmos-image-filter/src/pictures/test.pgm", c_in);
-		distributor(c_in, c_filters, c_out);
-		par (int i = 0; i < WORKERS; i++)
-			processPixel(c_filters[i]);
-		DataOutStream("/Users/alexander/dev/csyear2/xmos-image-filter/xmos-image-filter/src/pictures/test_out.pgm", c_out);
+		dataInStream(FILE_IN_NAME, stream_in);
+		distributor(stream_in, workers_in);
+		par(int i = 0; i < NUM_WORKERS; i++) processLine(workers_in[i], workers_out[i]);
+		dataOutStream(workers_out, FILE_OUT_NAME);
 	}
 
-	printf("filtering complete, terminating\n");
+	printf("Filter application complete, terminating.\n");
 
 	return 0;
 }
+
