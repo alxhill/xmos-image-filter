@@ -13,7 +13,7 @@
 
 #define IMHT 16
 #define IMWD 16
-#define WORKERS 3
+#define WORKERS 4
 
 /////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -38,9 +38,9 @@ void DataInStream(char infname[], chanend c_out)
         for( int x = 0; x < IMWD; x++ )
         {
             c_out <: line[x];
-            printf( "-%4.1d ", line[ x ] ); //uncomment to show image values
+//            printf( "-%4.1d ", line[ x ] ); //uncomment to show image values
         }
-        printf( "\n" ); //uncomment to show image values
+//        printf( "\n" ); //uncomment to show image values
     }
 
     _closeinpgm();
@@ -65,10 +65,10 @@ void DataOutStream(char outfname[], chanend c_out)
         for( int x = 0; x < IMWD; x++ )
         {
             c_out :> line[x];
-            printf( "+%4.1d ", line[ x ] ); //uncomment to show image values
+//            printf( "+%4.1d ", line[ x ] ); //uncomment to show image values
         }
         _writeoutline(line, IMWD);
-        printf( "\n" ); //uncomment to show image values
+//        printf( "\n" ); //uncomment to show image values
     }
 
     _closeinpgm();
@@ -153,7 +153,7 @@ void distributor(chanend c_in, chanend c_filters[WORKERS], chanend c_out)
 			fillLine(c_in, lines[(currLine+1)%3]);
 		}
 
-//    	printf("\n==== LINE %d ====\n", currLine);
+        printf("\n==== LINE %d ====\n", currLine);
 		for (int i = 1; i <= IMWD; i) // incrementing is done manually later
 		{
 			int workCount = IMWD-(i-1) > WORKERS ? WORKERS : IMWD-(i-1);
@@ -204,11 +204,11 @@ int main()
 	chan c_filters[WORKERS];
 
 	par {
-		DataInStream("/Users/alexander/dev/csyear2/xmos-image-filter/xmos-image-filter/src/pictures/test0.pgm", c_in);
+		DataInStream("/Users/alexander/dev/csyear2/xmos-image-filter/xmos-image-filter/src/pictures/test.pgm", c_in);
 		distributor(c_in, c_filters, c_out);
 		par (int i = 0; i < WORKERS; i++)
 			processPixel(c_filters[i]);
-		DataOutStream("/Users/alexander/dev/csyear2/xmos-image-filter/xmos-image-filter/src/pictures/test0_out.pgm", c_out);
+		DataOutStream("/Users/alexander/dev/csyear2/xmos-image-filter/xmos-image-filter/src/pictures/test_out.pgm", c_out);
 	}
 
 	printf("filtering complete, terminating\n");

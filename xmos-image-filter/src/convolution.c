@@ -6,29 +6,29 @@
  */
 #include "convolution.h"
 
-float blur[3][3] = {
-		{0.111,0.111,0.111},
-		{0.111,0.111,0.111},
-		{0.111,0.111,0.111}
+int blur[3][3] = {
+		{1,1,1},
+		{1,1,1},
+		{1,1,1}
 };
 
 
-float sharpen[3][3] = {
-		{-1,-1,-1},
-		{-1,9,-1},
-		{-1,-1,-1}
+int sharpen[3][3] = {
+		{-9,-9,-9},
+		{-9,81,-9},
+		{-9,-9,-9}
 };
 
-float edges[3][3] = {
-		{-1,-1,-1},
-		{-1,8,-1},
-		{-1,-1,-1}
+int edges[3][3] = {
+		{-9,-9,-9},
+		{-9,72,-9},
+		{-9,-9,-9}
 };
 
-float emboss[3][3] = {
-		{-2,-1,0},
-		{-1,1,1},
-		{0,1,2}
+int emboss[3][3] = {
+		{-18,-9,0},
+		{-9,9,9},
+		{0,9,18}
 };
 
 
@@ -55,7 +55,7 @@ pixel convolution_handler(filter_t filter, pixel p1, pixel p2, pixel p3, pixel p
 	return 0;
 }
 
-pixel convolution(float filter[3][3], pixel pixels[3][3])
+pixel convolution(int filter[3][3], pixel pixels[3][3])
 {
 	float row1, row2, row3, final;
 
@@ -63,7 +63,7 @@ pixel convolution(float filter[3][3], pixel pixels[3][3])
 	row2 = filter[1][0]*pixels[1][0]+filter[1][1]*pixels[1][1]+filter[1][2]*pixels[1][2];
 	row3 = filter[2][0]*pixels[2][0]+filter[2][1]*pixels[2][1]+filter[2][2]*pixels[2][2];
 
-	final = row1+row2+row3;
+	final = (row1+row2+row3)/9;
 	if (final > BIT_DEPTH) final = BIT_DEPTH;
 	if (final < 0) final = 0;
 
