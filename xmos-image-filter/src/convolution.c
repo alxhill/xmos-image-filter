@@ -66,8 +66,6 @@ pixel convolution(float filter[3][3], pixel pixels[3][3])
 	final = row1+row2+row3;
 	if (final > BIT_DEPTH) final = BIT_DEPTH;
 	if (final < 0) final = 0;
-	// otherwise it comes back inverted...
-	final = BIT_DEPTH - final;
 
 	return (pixel) (final+0.5);
 }
