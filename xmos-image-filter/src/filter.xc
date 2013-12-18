@@ -8,48 +8,35 @@
 /////////////////////////////////////////////////////////////////////////////////////////
 
 #include <platform.h>
-#include <stdio.h>
 #include "convolution.h"
 
+//Useful Boolean Defines
 #define FALSE 0
 #define TRUE 1
-#define NUM_WORKERS 9
-#define NUM_LED 12
 
-#define FILE_IN_NAME "C:\\Users\\Sam\\Desktop\\xmos\\test.pgm"
-#define FILE_OUT_NAME "C:\\Users\\Sam\\Desktop\\xmos\\test_out.pgm"
-#define IMWD 400
-#define IMHT 256
-#define FILTER BLUR
+//Board Specific Constants
+#define NUM_WORKERS 9 //Number of workers (max 9 on xc-1a due to channel restraints)
+#define NUM_LED 12 //Number of LEDs
 
+//File Information
+#define FILE_IN_NAME "C:\\Users\\Sam\\Desktop\\xmos\\test.pgm" //Input file path
+#define FILE_OUT_NAME "C:\\Users\\Sam\\Desktop\\xmos\\test_out.pgm" //Output file path
+#define IMWD 16 //Image width
+#define IMHT 16 // Image height
+#define FILTER BLUR //Starting filter
+
+//Port assignments
 out port cled[4] = {PORT_CLOCKLED_0, PORT_CLOCKLED_1, PORT_CLOCKLED_2, PORT_CLOCKLED_3};
 out port cledG = PORT_CLOCKLED_SELG;
 out port cledR = PORT_CLOCKLED_SELR;
 in port buttons = PORT_BUTTON;
 
+//Useful state typedef, allowing easy control of how functions react to stimulus
 typedef enum {
-	START,
-	EDIT,
-	RUNNING,
-	PAUSED,
-	END = NUM_LED
+	START, EDIT, RUNNING, PAUSED, ENDING, END = NUM_LED
 } state_t;
 
-void showLED(out port cled, chanend fromVisualiser)
-{
-	unsigned int lightPattern;
-	char isRunning = TRUE;
-
-	while(isRunning)
-	{
-		fromVisualiser :> lightPattern;
-		if(lightPattern == END) isRunning = FALSE;
-		else cled <: lightPattern;
-	}
-
-	return;
-}
-
+//Useful delay function, taking a time to delay for, effectivly pausing a function.
 void waitMoment(unsigned int myTime)
 {
 	timer tmr;
@@ -59,131 +46,147 @@ void waitMoment(unsigned int myTime)
 	tmr when timerafter(waitTime) :> void;
 }
 
-void buttonListener(in port buttons, chanend toController)
+//Button listener function taking input from the buttons and passing it to the controller.
+void buttonListener(in port buttons, chanend toControl)
 {
 	int lastButtonInput = 0, newButtonInput, isRunning = TRUE;
 
 	while(isRunning)
 	{
 		buttons :> newButtonInput;
-		lastButtonInput = newButtonInput;
 		if(newButtonInput != 15){
-			toController <: newButtonInput;
-			toController :> isRunning;
-			if(newButtonInput == 11) isRunning = FALSE;
-			else waitMoment(10000000);
+			toControl <: newButtonInput;
+			toControl :> isRunning;
+			waitMoment(10000000);
 		}
+		lastButtonInput = newButtonInput;
 	}
 
 	return;
 }
 
+//Takes LED information from the controller and updates the board LEDs accordingly
+void showLED(out port cled, chanend fromControl)
+{
+	unsigned int lightPattern;
+	char isRunning = TRUE;
+
+	while(isRunning){
+		fromControl :> lightPattern;
+		if(lightPattern == END) isRunning = FALSE;
+		else cled <: lightPattern;
+	}
+
+	return;
+}
+
+//Controller function, coordinating the running of the program including graceful termination and change of filters.
 void controller(chanend fromButtons, chanend toDistributer, chanend toDataOut, chanend toQuadrant[])
 {
-	int i, k, button, completion = 0, isRunning = TRUE, currLine;
+	int i, k, button, completion = 0, isRunning = TRUE, currLine, startTime, stopTime;
 	filter_t filter = FILTER;
 	state_t state = START;
+	timer tmr;
 
+	//Starts by showing the current filter on the LEDs
 	cledG <: 1;
-	while(state != END && state != RUNNING){
-		for(i = 0; i < 4; i++)
-			toQuadrant[i] <: (16<<(filter%3))*(filter/3==i);
+	for(i = 0; i < 4; i++)
+		toQuadrant[i] <: (16<<(filter%3))*(filter/3==i);
+
+	while(state == START){
 		fromButtons :> button;
-		fromButtons <: TRUE;
-		switch(button){
-			case 14:
-				if(state == EDIT) filter = (filter + (NUM_FILTERS - 1)) % NUM_FILTERS;
-				else state = RUNNING;
-				break;
-			case 13:
-				if(state == EDIT) filter = (filter + 1) % NUM_FILTERS;
-				break;
-			case 11:
-				toDistributer <: END;
-				toDistributer <: END;
-				toDataOut <: END;
-				for(i = 0; i < 4; i++)
-					toQuadrant[i] <: END;
-				state = END;
-				break;
-			case 7:
-				if(state == START){
-					cledG <: 0;
-					cledR <: 1;
-					state = EDIT;
-				}
-				else if(state == EDIT){
+		if(button == 14) state = RUNNING;
+		else if(button == 11) state = END;
+		else if(button == 7){
+			cledG <: 0;
+			cledR <: 1;
+			state = EDIT;
+			while(state == EDIT){
+				fromButtons <: TRUE;
+				fromButtons :> button;
+				if(button == 14) filter = (filter + (NUM_FILTERS - 1)) % NUM_FILTERS;
+				else if(button == 13) filter = (filter + 1) % NUM_FILTERS;
+				else if(button == 11) state = END;
+				else if(button == 7){
 					cledR <: 0;
 					cledG <: 1;
 					state = START;
 				}
-				break;
-			default:
-				break;
+				for(i = 0; i < 4; i++)
+					toQuadrant[i] <: (16<<(filter%3))*(filter/3==i);
+			}
 		}
+		fromButtons <: TRUE;
 	}
-	if(state != END){
+
+	if(state == END){
+		toDistributer <: END;
+		toDistributer <: END;
+		toDataOut <: END;
+	}
+	else{
+		tmr :> startTime;
 		toDistributer <: RUNNING;
 		toDistributer <: filter;
 		toDataOut <: RUNNING;
-	}
-	while(state != END){
-		for(i = 0; i < 4; i++){
-			k = (16<<(completion%3))*(completion/3==i);
-			toQuadrant[i] <: k;
-		}
-		select{
-			case toDataOut :> completion:
-				toDataOut <: RUNNING;
-				break;
-			default: break;
-		}
-		if(completion == NUM_LED){
-			fromButtons :> button;
-			fromButtons <: FALSE;
-			state = END;
-			for(i = 0; i < 4; i++)
-				toQuadrant[i] <: END;
-		}
-		else{
+		for(i = 0; i < 4; i++)
+			toQuadrant[i] <: (16<<(completion%3))*(completion/3==i);
+
+		while(state == RUNNING){
 			select{
+				case toDataOut :> completion:
+					for(i = 0; i < 4; i++)
+						toQuadrant[i] <: (16<<(completion%3))*(completion/3==i);
+					if(completion == NUM_LED){
+						toDataOut <: END;
+						state = END;
+					}
+					else toDataOut <: RUNNING;
+					break;
 				case fromButtons :> button:
-					switch(button){
-						case 13:
-							if(state == PAUSED){
+					if(button == 13){
+						state = PAUSED;
+						toDistributer <: PAUSED;
+						toDataOut :> completion;
+						toDataOut <: PAUSED;
+						while(state == PAUSED){
+							fromButtons <: TRUE;
+							fromButtons :> button;
+							if(button == 13){
+								state = RUNNING;
 								toDistributer <: RUNNING;
 								toDataOut <: RUNNING;
-								state = RUNNING;
 							}
-							else if (state == RUNNING){
-								toDistributer <: PAUSED;
-								toDataOut :> completion;
-								toDataOut <: PAUSED;
-								state = PAUSED;
+							if(button == 11){
+								state = ENDING;
 							}
-							break;
-						case 11:
-							toDistributer <: END;
-							toDistributer :> currLine;
-							toDataOut :> completion;
-							toDataOut <: END;
-							toDataOut <: currLine;
-							for(i = 0; i < 4; i++)
-								toQuadrant[i] <: END;
-							state = END;
-							break;
-						default:
-							break;
+						}
 					}
+					else if(button == 11) state = ENDING;
 					fromButtons <: TRUE;
 					break;
-				default:
-					break;
+				default: break;
 			}
 		}
 	}
 
-	printf("Controller Ended!\n");
+	if(state == ENDING){
+		toDistributer <: END;
+		toDistributer :> currLine;
+		toDataOut :> completion;
+		toDataOut <: END;
+		toDataOut <: currLine;
+		state = END;
+	}
+	tmr :> stopTime;
+
+	fromButtons :> button;
+	fromButtons <: FALSE;
+	for(i = 0; i < 4; i++)
+		toQuadrant[i] <: END;
+
+	printf("Time Taken: %d seconds\n", (stopTime - startTime) / 100000000);
+
 	return;
 }
 
@@ -205,7 +208,6 @@ void dataInStream(char file_name[], chanend stream_in)
 	}
 	_closeinpgm();
 
-	printf("DataIn Ended\n");
 	return;
 }
 
@@ -227,7 +229,6 @@ void distributor(chanend fromControl, chanend stream_in, chanend workers_in[NUM_
 	}
 	for(i = 0; i < NUM_WORKERS; i++)
 		workers_in[i] <: filter;
-
 	if(state != END){
 		while(currLine < (IMHT - 1) && state != END)
 		{
@@ -265,7 +266,6 @@ void distributor(chanend fromControl, chanend stream_in, chanend workers_in[NUM_
 			}
 		}
 
-		printf("Distributor Ending!\n");
 		for(i = 0; i < NUM_WORKERS && state ; i++)
 		{
 			workers_in[i] :> sent;
@@ -276,45 +276,44 @@ void distributor(chanend fromControl, chanend stream_in, chanend workers_in[NUM_
 	for(x = 0; x < IMWD; x++) stream_in :> lines[0][x];
 	stream_in <: FALSE;
 
-	printf("Distributor Ended!\n");
+	printf("Distributer Ended\n");
 	return;
 }
 
-void processLine(int i, chanend worker_in, chanend worker_out)
+//
+void worker(chanend worker_in, chanend worker_out)
 {
-	int x, y, lineNumber = 0, proceed, filter;
+	int x, y, lineNumber = 0, waiting, filter;
 	pixel pixelsIn[3][IMWD];
 	pixel pixelsOut[IMWD - 2];
 
 	worker_in :> filter;
-	while(lineNumber < IMHT && filter != END)
+	if(filter == END) return;
+
+	while(lineNumber < IMHT)
 	{
 		worker_in <: TRUE;
 		worker_in :> lineNumber;
-		printf("Worker[%d] processing line %d\n", i, lineNumber);
-		if(lineNumber < IMHT)
-		{
-			for(y = 0; y < 3; y++)
-				for(x = 0; x < IMWD; x++)
-					worker_in :> pixelsIn[y][x];
-			for(x = 0; x < (IMWD - 2); x++)
-				pixelsOut[x] = convolution_handler(filter,
-						pixelsIn[0][x], pixelsIn[0][x + 1], pixelsIn[0][x + 2],
-						pixelsIn[1][x], pixelsIn[1][x + 1], pixelsIn[1][x + 2],
-						pixelsIn[2][x], pixelsIn[2][x + 1], pixelsIn[2][x + 2]);
+		if(lineNumber == IMHT) return;
+		for(y = 0; y < 3; y++)
+			for(x = 0; x < IMWD; x++)
+				worker_in :> pixelsIn[y][x];
 
-			proceed = FALSE;
-			printf("Worker[%d] processed line %d\n", i, lineNumber);
-			while(proceed == FALSE){
-				worker_out <: lineNumber;
-				worker_out :> proceed;
-			}
-			for (x = 0; x < (IMWD - 2); x++) worker_out <: pixelsOut[x];
-			printf("Worker[%d] sent line %d\n", i, lineNumber);
+		for(x = 0; x < (IMWD - 2); x++)
+			pixelsOut[x] = convolution_handler(filter,
+					pixelsIn[0][x], pixelsIn[0][x + 1], pixelsIn[0][x + 2],
+					pixelsIn[1][x], pixelsIn[1][x + 1], pixelsIn[1][x + 2],
+					pixelsIn[2][x], pixelsIn[2][x + 1], pixelsIn[2][x + 2]);
+
+		waiting = TRUE;
+		while(waiting){
+			worker_out <: lineNumber;
+			worker_out :> waiting;
 		}
+		for (x = 0; x < (IMWD - 2); x++) worker_out <: pixelsOut[x];
 	}
 
-	printf("Worker[%d] Ended!\n", i);
+	printf("Worker Ended\n");
 	return;
 }
 
@@ -339,14 +338,13 @@ void dataOutStream(chanend toControl, chanend workers_out[], char file_name[])
 
 		while(currLine < totalLines)
 		{
-			printf("%d out of %d\n", currLine, totalLines);
 			for(i = 0; i < NUM_WORKERS; i++)
 			{
 				select{
 					case workers_out[i] :> lineNum:
 						if(lineNum == currLine)
 						{
-							workers_out[i] <: TRUE;
+							workers_out[i] <: FALSE;
 							for(x = 1; x < (IMWD - 1); x++)
 								workers_out[i] :> line[x];
 							_writeoutline(line, IMWD);
@@ -356,7 +354,7 @@ void dataOutStream(chanend toControl, chanend workers_out[], char file_name[])
 							while(state == PAUSED) toControl :> state;
 							if(state == END) toControl :> totalLines;
 						}
-						else workers_out[i] <: FALSE;
+						else workers_out[i] <: TRUE;
 						break;
 					default:
 						break;
@@ -375,7 +373,6 @@ void dataOutStream(chanend toControl, chanend workers_out[], char file_name[])
 		_closeinpgm();
 	}
 
-	printf("Data Out Ended!\n");
 	return;
 }
 
@@ -392,7 +389,7 @@ int main(){
 		on stdcore[0]: distributor(controlDistributer, stream_in, workers_in);
 		on stdcore[0]: dataOutStream(controlDataOut, workers_out, FILE_OUT_NAME);
 		par(int i = 0; i < NUM_WORKERS; i++){
-			on stdcore[(i%3)+1]: processLine(i, workers_in[i], workers_out[i]);
+			on stdcore[(i%3)+1]: worker(workers_in[i], workers_out[i]);
 		}
 		par(int i = 0; i < 4; i++){
 			on stdcore[i%4]: showLED(cled[i], quadrant[i]);
