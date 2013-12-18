@@ -13,14 +13,13 @@
 
 #define FALSE 0
 #define TRUE 1
-#define NUM_WORKERS 5
+#define NUM_WORKERS 4
 #define NUM_LED 12
 
-#define FILE_IN_NAME "C:\\Users\\Sam\\Desktop\\xmos\\test.pgm"
-#define FILE_OUT_NAME "C:\\Users\\Sam\\Desktop\\xmos\\test_out.pgm"
-#define IMHT 16
-#define IMWD 16
-
+#define FILE_IN_NAME "/Users/alexander/dev/csyear2/xmos-image-filter/xmos-image-filter/src/pictures/BristolCathedral.pgm"
+#define FILE_OUT_NAME "/Users/alexander/dev/csyear2/xmos-image-filter/xmos-image-filter/src/pictures/BristolCathedral_out.pgm"
+#define IMHT 256
+#define IMWD 400
 
 void dataInStream(char file_name[], chanend stream_in)
 {
@@ -191,13 +190,16 @@ int main()
 	chan workers_out[NUM_WORKERS];
 
 	par {
-		dataInStream(FILE_IN_NAME, stream_in);
-		distributor(stream_in, workers_in);
-		par(int i = 0; i < NUM_WORKERS; i++) processLine(workers_in[i], workers_out[i]);
-		dataOutStream(workers_out, FILE_OUT_NAME);
+		on stdcore[0]: dataInStream(FILE_IN_NAME, stream_in);
+		on stdcore[1]: distributor(stream_in, workers_in);
+
+		par(int i = 0; i < NUM_WORKERS; i++)
+			on stdcore[i%4]: processLine(workers_in[i], workers_out[i]);
+
+		on stdcore[3]: dataOutStream(workers_out, FILE_OUT_NAME);
 	}
 
-	printf("Filter application complete, terminating.\n");
+	//printf("Filter application complete, terminating.\n");
 
 	return 0;
 }
